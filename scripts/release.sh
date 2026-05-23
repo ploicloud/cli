@@ -34,10 +34,10 @@ make build >/dev/null
 make test  >/dev/null
 
 LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-VERSION=$(echo "$LATEST_TAG" | awk -F. '{
-    if (NF<3) { print $0".0.1"; next }
-    $NF=$NF+1; OFS="."; print
-}')
+IFS=. read -r major minor patch <<< "${LATEST_TAG#v}"
+major=${major:-0}; minor=${minor:-0}; patch=${patch:-0}
+patch=$((patch + 1))
+VERSION="v${major}.${minor}.${patch}"
 
 if git rev-parse "$VERSION" >/dev/null 2>&1; then
     echo "Tag $VERSION already exists. Aborting."
