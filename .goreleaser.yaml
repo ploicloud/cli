@@ -1,0 +1,76 @@
+version: 2
+
+project_name: ploicloud
+
+before:
+  hooks:
+    - go mod tidy
+    - go run ./gen/cmdgen gen/spec.json internal/commands/zz_generated.go
+
+builds:
+  - id: ploicloud
+    main: ./cmd/ploicloud
+    binary: ploicloud
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/ploicloud/cli/internal/client.Version={{.Version}}
+      - -X github.com/ploicloud/cli/internal/client.Commit={{.ShortCommit}}
+
+  - id: pcctl
+    main: ./cmd/ploicloud
+    binary: pcctl
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/ploicloud/cli/internal/client.Version={{.Version}}
+      - -X github.com/ploicloud/cli/internal/client.Commit={{.ShortCommit}}
+
+archives:
+  - id: combined
+    ids: [ploicloud, pcctl]
+    name_template: "ploicloud_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+brews:
+  - name: ploicloud
+    repository:
+      owner: ploicloud
+      name: homebrew-tap
+    homepage: "https://ploi.cloud"
+    description: "Command line interface for Ploi Cloud"
+    license: "MIT"
+    install: |
+      bin.install "ploicloud"
+      bin.install "pcctl"
+    test: |
+      system "#{bin}/ploicloud", "version"
+      system "#{bin}/pcctl", "version"

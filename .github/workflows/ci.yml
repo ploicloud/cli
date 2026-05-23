@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - run: go mod download
+      - name: Regenerate commands
+        run: go run ./gen/cmdgen gen/spec.json internal/commands/zz_generated.go
+      - name: Verify no drift in generated code
+        run: git diff --exit-code internal/commands/zz_generated.go
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go build ./...
+
+  spec-freshness:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare committed spec to production
+        run: |
+          curl -fsSL https://ploi.cloud/docs/api.json -o /tmp/upstream.json
+          if ! diff -q gen/spec.json /tmp/upstream.json > /dev/null; then
+            echo "::warning::gen/spec.json is out of date with production. Run 'make sync-spec'."
+          fi
