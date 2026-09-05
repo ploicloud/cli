@@ -428,58 +428,18 @@ func registerGenerated(root *cobra.Command, c *client.Client) {
 	})
 	gApplications.AddCommand(cApplicationsExportYaml)
 
-	gApplicationsFiles := &cobra.Command{Use: "files", Short: "Manage files"}
-	gApplications.AddCommand(gApplicationsFiles)
-	cApplicationsFilesRead := buildCmd(c, opSpec{
-		ID:       "applications.files.read",
-		Method:   "POST",
-		PathTmpl: "/applications/{application}/files/read",
-		Use:      "read",
-		Short:    "Read a file from an instance",
-		Long:     "Read a single file from a running instance of the application. The contents are returned\nbase64-encoded, so binary files survive the round trip. Files larger than 10MB are rejected.",
-		PathParams: []paramDef{
-			{Name: "application", Type: "integer", Required: true, Desc: "The application ID"},
-		},
-		QueryParams: []paramDef{},
-		BodyParams: []paramDef{
-			{Name: "instance", Type: "string", Required: true, Desc: "The running instance to read from."},
-			{Name: "path", Type: "string", Required: true, Desc: "Absolute path of the file inside the instance."},
-		},
-	})
-	gApplicationsFiles.AddCommand(cApplicationsFilesRead)
-
-	cApplicationsFilesWrite := buildCmd(c, opSpec{
-		ID:       "applications.files.write",
-		Method:   "POST",
-		PathTmpl: "/applications/{application}/files/write",
-		Use:      "write",
-		Short:    "Write a file to an instance",
-		Long:     "Write a single file into a running instance of the application, creating it if it does not\nexist and replacing it if it does. Content must be base64-encoded and may not exceed 10MB\nonce decoded. The file lives on the targeted instance only and does not survive a redeploy.",
-		PathParams: []paramDef{
-			{Name: "application", Type: "integer", Required: true, Desc: "The application ID"},
-		},
-		QueryParams: []paramDef{},
-		BodyParams: []paramDef{
-			{Name: "content", Type: "string", Required: true, Desc: "Base64-encoded file content, 10MB maximum once decoded."},
-			{Name: "instance", Type: "string", Required: true, Desc: "The running instance to write to."},
-			{Name: "path", Type: "string", Required: true, Desc: "Absolute path of the file inside the instance."},
-		},
-	})
-	gApplicationsFiles.AddCommand(cApplicationsFilesWrite)
-
 	cApplicationsIndex := buildCmd(c, opSpec{
 		ID:         "applications.index",
 		Method:     "GET",
 		PathTmpl:   "/applications",
 		Use:        "list",
 		Short:      "List applications",
-		Long:       "Retrieve a paginated list of applications. By default only applications in the user's current team are\nreturned. Pass all_teams=true to instead list every application the user has access to across all of\ntheir teams; in that mode each application also includes the team it belongs to. Applications can be\nfiltered by status and searched by name. The response includes basic application information along with\nassociated domains and services.",
+		Long:       "Retrieve a paginated list of applications for the current team. Applications can be filtered by status\nand searched by name. The response includes basic application information along with associated domains\nand services.",
 		PathParams: []paramDef{},
 		QueryParams: []paramDef{
 			{Name: "per_page", Type: "integer", Required: false, Desc: ""},
 			{Name: "search", Type: "string", Required: false, Desc: ""},
 			{Name: "status", Type: "string", Required: false, Desc: ""},
-			{Name: "all_teams", Type: "boolean", Required: false, Desc: ""},
 		},
 		BodyParams: []paramDef{},
 	})
@@ -517,21 +477,6 @@ func registerGenerated(root *cobra.Command, c *client.Client) {
 		BodyParams: []paramDef{},
 	})
 	gApplications.AddCommand(cApplicationsLogs)
-
-	cApplicationsMigrate := buildCmd(c, opSpec{
-		ID:       "applications.migrate",
-		Method:   "POST",
-		PathTmpl: "/applications/{application}/migrate",
-		Use:      "migrate",
-		Short:    "Migrate application to the new network layer",
-		Long:     "Migrate an application that is still on the legacy network layer to the new one. This sets the\napplication to the \"migrating\" state and starts a new deployment that applies the change. The\napplication's preview URL changes as part of the migration, so if a custom domain is in use its\nDNS should be pointed at the new network address before calling this endpoint.\n\nApplications that are already on the new network layer return 422. The availability of this\nmigration is also surfaced in the application's `alerts` array (key `migration_available`).",
-		PathParams: []paramDef{
-			{Name: "application", Type: "integer", Required: true, Desc: "The application ID"},
-		},
-		QueryParams: []paramDef{},
-		BodyParams:  []paramDef{},
-	})
-	gApplications.AddCommand(cApplicationsMigrate)
 
 	gApplicationsNetworks := &cobra.Command{Use: "networks", Short: "Manage networks"}
 	gApplications.AddCommand(gApplicationsNetworks)
@@ -587,38 +532,6 @@ func registerGenerated(root *cobra.Command, c *client.Client) {
 		},
 	})
 	gApplicationsPhpConfig.AddCommand(cApplicationsPhpConfigUpdate)
-
-	gApplicationsQuickDeploy := &cobra.Command{Use: "quick-deploy", Short: "Manage quick-deploy"}
-	gApplications.AddCommand(gApplicationsQuickDeploy)
-	cApplicationsQuickDeployDestroy := buildCmd(c, opSpec{
-		ID:       "applications.quick-deploy.destroy",
-		Method:   "DELETE",
-		PathTmpl: "/applications/{application}/quick-deploy",
-		Use:      "delete",
-		Short:    "Disable quick deploy",
-		Long:     "Disable quick deploy for the application by removing the deployment webhook from its Git provider.\nThe application stops reporting quick deploy as enabled either way. When the webhook could not be\nremoved at the provider, for example because the provider refused the request or the Git account has\nsince been disconnected, the response says so: that webhook can still trigger deployments until it is\nremoved by hand, because the application's deploy webhook URL is unchanged. Disabling an application\nthat does not have quick deploy enabled succeeds without contacting the provider.",
-		PathParams: []paramDef{
-			{Name: "application", Type: "integer", Required: true, Desc: "The application ID"},
-		},
-		QueryParams: []paramDef{},
-		BodyParams:  []paramDef{},
-	})
-	gApplicationsQuickDeploy.AddCommand(cApplicationsQuickDeployDestroy)
-
-	cApplicationsQuickDeployStore := buildCmd(c, opSpec{
-		ID:       "applications.quick-deploy.store",
-		Method:   "POST",
-		PathTmpl: "/applications/{application}/quick-deploy",
-		Use:      "create",
-		Short:    "Enable quick deploy",
-		Long:     "Enable quick deploy for the application, so that pushing to its default branch automatically triggers\na deployment. This registers a webhook with the application's Git provider. The application must have a\nconnected Git provider, a known repository owner and name, and at least one successful deployment;\nwhen it does not, the request fails with the reason. An application that already has quick deploy\nenabled is rejected rather than given a second webhook.",
-		PathParams: []paramDef{
-			{Name: "application", Type: "integer", Required: true, Desc: "The application ID"},
-		},
-		QueryParams: []paramDef{},
-		BodyParams:  []paramDef{},
-	})
-	gApplicationsQuickDeploy.AddCommand(cApplicationsQuickDeployStore)
 
 	gApplicationsRepository := &cobra.Command{Use: "repository", Short: "Manage repository"}
 	gApplications.AddCommand(gApplicationsRepository)
@@ -942,7 +855,7 @@ func registerGenerated(root *cobra.Command, c *client.Client) {
 		PathTmpl: "/applications/{application}/services/{service}",
 		Use:      "update",
 		Short:    "Update service configuration",
-		Long:     "Update configuration for an existing service. Only certain settings can be modified after creation.\nChanges may require a service restart to take effect. Worker services can update their command,\nwhile other services have limited update capabilities.\n\nSubmitted settings are merged into the stored settings, so keys you leave out keep their current\nvalues. To clear a setting, submit its neutral value rather than omitting it.",
+		Long:     "Update configuration for an existing service. Only certain settings can be modified after creation.\nChanges may require a service restart to take effect. Worker services can update their command,\nwhile other services have limited update capabilities.",
 		PathParams: []paramDef{
 			{Name: "application", Type: "integer", Required: true, Desc: "The application ID"},
 			{Name: "service", Type: "integer", Required: true, Desc: "The service ID"},
@@ -1074,7 +987,7 @@ func registerGenerated(root *cobra.Command, c *client.Client) {
 			{Name: "name", Type: "string", Required: true, Desc: ""},
 			{Name: "php_version", Type: "string", Required: false, Desc: "one of: 8.5, 8.4, 8.3, 8.2, 8.1, 8.0, 7.4"},
 			{Name: "provider", Type: "string", Required: false, Desc: ""},
-			{Name: "region", Type: "string", Required: false, Desc: "one of: ams1, chi1, lon1, fra1"},
+			{Name: "region", Type: "string", Required: false, Desc: ""},
 			{Name: "repository_name", Type: "string", Required: false, Desc: ""},
 			{Name: "repository_owner", Type: "string", Required: false, Desc: ""},
 			{Name: "repository_url", Type: "string", Required: false, Desc: ""},
@@ -1308,7 +1221,7 @@ func registerGenerated(root *cobra.Command, c *client.Client) {
 		PathTmpl:    "/infrastructure/apply",
 		Use:         "apply",
 		Short:       "Apply infrastructure configuration from YAML",
-		Long:        "This endpoint processes infrastructure-as-code definitions to create or update\napplications and their associated resources on the Ploi Cloud platform.\n\n## YAML Format\n\nThe YAML configuration should follow this structure:\n\n```yaml\napiVersion: v1\nkind: Infrastructure\nmetadata:\n  name: my-app          # Application identifier\n  team: 1               # Team ID that owns this infrastructure\nspec:\n  application:\n    type: laravel       # Application type: laravel, nodejs, wordpress\n    version: \"12\"       # Framework version\n    label: My App       # Display name (optional)\n    region: ams1        # Region: ams1, chi1, lon1, fra1. Defaults to ams1. Immutable once created\n    tags:               # Tags for organizing apps (optional)\n      - production\n      - api\n    repository:\n      url: https://github.com/user/repo\n      owner: user\n      name: repo\n      branch: main\n    runtime:\n      php_version: 8.4           # PHP version (for PHP apps)\n      nodejs_version: \"24\"       # Node.js version\n    commands:\n      build:                     # Commands run during build\n        - npm ci\n        - npm run build\n      init:                      # Commands run before app starts\n        - php artisan migrate\n      start: npm start           # Override start command\n    settings:\n      health_check_path: /health\n      scheduler_enabled: true    # Enable Laravel scheduler\n      replicas: 3                # Number of replicas\n      memory: 1024Mi             # Memory limit\n      scheduled_deletion_at: \"2026-12-01T00:00:00Z\"  # Optional ISO 8601 timestamp; the application and all of its data will be permanently deleted at this time. Owners receive warning emails 7 and 1 day before. Removing this field clears the schedule.\n    php:                         # PHP-specific settings\n      extensions:\n        - ldap\n        - imagick\n      settings:\n        - memory_limit=512M\n        - max_execution_time=60\n    security:                    # Optional: Nginx security configuration\n      enabled: true              # Enable security headers\n      headers:                   # Custom HTTP security headers (optional when enabled=true)\n                                 # Example OWASP-recommended headers (from UI \"Set default values\" button):\n        Cache-Control: \"no-store, max-age=0\"\n        Content-Security-Policy: \"default-src 'self'; form-action 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests\"\n        Cross-Origin-Embedder-Policy: require-corp\n        Cross-Origin-Opener-Policy: same-origin\n        Cross-Origin-Resource-Policy: same-origin\n        Permissions-Policy: \"accelerometer=(),ambient-light-sensor=(),autoplay=(),battery=(),camera=(),display-capture=(),document-domain=(),encrypted-media=(),execution-while-not-rendered=(),execution-while-out-of-viewport=(),fullscreen=(),gamepad=(),geolocation=(),gyroscope=(),hid=(),idle-detection=(),local-fonts=(),magnetometer=(),microphone=(),midi=(),payment=(),picture-in-picture=(),publickey-credentials-get=(),screen-wake-lock=(),serial=(),speaker-selection=(),usb=(),web-share=(),xr-spatial-tracking=()\"\n        Referrer-Policy: no-referrer\n        Strict-Transport-Security: \"max-age=31536000; includeSubDomains\"\n        X-Content-Type-Options: nosniff\n        X-Frame-Options: deny\n        X-Permitted-Cross-Domain-Policies: none\n      ssl_protocols: \"TLSv1.2 TLSv1.3\"    # SSL/TLS protocols (optional)\n      ssl_ciphers: \"ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305\"  # SSL cipher suites (optional, applied to TLS 1.2; ignored under TLS 1.3)\n\n  domains:\n    - domain: app.example.com\n    - domain: www.example.com\n\n  secrets:                       # Environment variables\n    - key: APP_KEY\n      value: base64:your-app-key\n    - key: DB_PASSWORD\n      value: secret123\n\n  volumes:                       # Persistent volumes\n    - name: storage\n      mount_path: /var/www/html/storage\n      volume_size: 10            # Size in GB\n\n  services:                      # Database/cache services\n    - name: database\n      type: mysql                # mysql, postgresql, mongodb, redis, valkey, rabbitmq, minio, sftp\n      version: \"8.0\"\n      memory: 2Gi\n      volume_size: 20Gi\n      settings:                  # Service-specific settings\n        extensions:\n          - postgis\n\n    - name: cache\n      type: redis\n      version: \"7.2\"\n      memory: 512Mi\n      volume_size: 1Gi\n\n    - name: queue-worker        # Worker service\n      type: worker\n      memory: 1Gi\n      command: php artisan queue:work\n\n  container_services:            # Pre-built container services\n    - name: pdf-generator\n      type: gotenberg            # gotenberg, chrome-headless, clickhouse\n      version: \"8\"\n      memory: 1Gi\n```\n\n## Query Parameters\n\n- `dry_run` (boolean, default: false) - When true, shows what changes would be made without applying them\n- `auto_deploy` (boolean, default: true) - When true, automatically deploys the application after changes\n\n## Example cURL Request\n\n```bash\n# Normal deployment\ncurl -X POST https://api.ploi.cloud/api/v1/infrastructure/apply \\\n  -H \"Authorization: Bearer YOUR_API_TOKEN\" \\\n  -H \"Content-Type: application/yaml\" \\\n  --data-binary @ploi.yaml\n\n# Dry run mode - preview changes without applying\ncurl -X POST \"https://api.ploi.cloud/api/v1/infrastructure/apply?dry_run=true\" \\\n  -H \"Authorization: Bearer YOUR_API_TOKEN\" \\\n  -H \"Content-Type: application/yaml\" \\\n  --data-binary @ploi.yaml\n\n# Apply changes without automatic deployment\ncurl -X POST \"https://api.ploi.cloud/api/v1/infrastructure/apply?auto_deploy=false\" \\\n  -H \"Authorization: Bearer YOUR_API_TOKEN\" \\\n  -H \"Content-Type: application/yaml\" \\\n  --data-binary @ploi.yaml\n```\n\n## Response Format\n\n```json\n{\n  \"application_id\": 123,\n  \"application_name\": \"my-app\",\n  \"changes\": [\n    \"Application 'my-app' created\",\n    \"Domain 'app.example.com' added\",\n    \"Secret 'APP_KEY' created\",\n    \"Service 'database' (mysql) created\"\n  ],\n  \"structured_changes\": {\n    \"application\": { \"action\": \"created\", \"name\": \"my-app\" },\n    \"domains\": [{ \"action\": \"created\", \"domain\": \"app.example.com\" }],\n    \"secrets\": [{ \"action\": \"created\", \"key\": \"APP_KEY\" }],\n    \"services\": [{ \"action\": \"created\", \"name\": \"database\", \"type\": \"mysql\" }]\n  },\n  \"needs_deployment\": true,\n  \"auto_deploy_enabled\": true,\n  \"deployment_id\": 456,        // Only present if auto_deploy=true and deployment started\n  \"dry_run\": false,             // Indicates if this was a dry run\n  \"team\": \"My Team\"\n}\n```\n\n## Dry Run Mode\n\nWhen `dry_run=true`:\n- No database changes are made\n- No resources are created or modified\n- Response shows what would be changed with \"[DRY RUN] Would...\" prefixes\n- Deployments are never triggered, even if `auto_deploy=true`\n- Use this to validate your YAML and preview changes before applying",
+		Long:        "This endpoint processes infrastructure-as-code definitions to create or update\napplications and their associated resources on the Ploi Cloud platform.\n\n## YAML Format\n\nThe YAML configuration should follow this structure:\n\n```yaml\napiVersion: v1\nkind: Infrastructure\nmetadata:\n  name: my-app          # Application identifier\n  team: 1               # Team ID that owns this infrastructure\nspec:\n  application:\n    type: laravel       # Application type: laravel, nodejs, wordpress\n    version: \"12\"       # Framework version\n    label: My App       # Display name (optional)\n    tags:               # Tags for organizing apps (optional)\n      - production\n      - api\n    repository:\n      url: https://github.com/user/repo\n      owner: user\n      name: repo\n      branch: main\n    runtime:\n      php_version: 8.4           # PHP version (for PHP apps)\n      nodejs_version: \"24\"       # Node.js version\n    commands:\n      build:                     # Commands run during build\n        - npm ci\n        - npm run build\n      init:                      # Commands run before app starts\n        - php artisan migrate\n      start: npm start           # Override start command\n    settings:\n      health_check_path: /health\n      scheduler_enabled: true    # Enable Laravel scheduler\n      replicas: 3                # Number of replicas\n      memory: 1024Mi             # Memory limit\n      scheduled_deletion_at: \"2026-12-01T00:00:00Z\"  # Optional ISO 8601 timestamp; the application and all of its data will be permanently deleted at this time. Owners receive warning emails 7 and 1 day before. Removing this field clears the schedule.\n    php:                         # PHP-specific settings\n      extensions:\n        - ldap\n        - imagick\n      settings:\n        - memory_limit=512M\n        - max_execution_time=60\n    security:                    # Optional: Nginx security configuration\n      enabled: true              # Enable security headers\n      headers:                   # Custom HTTP security headers (optional when enabled=true)\n                                 # Example OWASP-recommended headers (from UI \"Set default values\" button):\n        Cache-Control: \"no-store, max-age=0\"\n        Content-Security-Policy: \"default-src 'self'; form-action 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests\"\n        Cross-Origin-Embedder-Policy: require-corp\n        Cross-Origin-Opener-Policy: same-origin\n        Cross-Origin-Resource-Policy: same-origin\n        Permissions-Policy: \"accelerometer=(),ambient-light-sensor=(),autoplay=(),battery=(),camera=(),display-capture=(),document-domain=(),encrypted-media=(),execution-while-not-rendered=(),execution-while-out-of-viewport=(),fullscreen=(),gamepad=(),geolocation=(),gyroscope=(),hid=(),idle-detection=(),local-fonts=(),magnetometer=(),microphone=(),midi=(),payment=(),picture-in-picture=(),publickey-credentials-get=(),screen-wake-lock=(),serial=(),speaker-selection=(),usb=(),web-share=(),xr-spatial-tracking=()\"\n        Referrer-Policy: no-referrer\n        Strict-Transport-Security: \"max-age=31536000; includeSubDomains\"\n        X-Content-Type-Options: nosniff\n        X-Frame-Options: deny\n        X-Permitted-Cross-Domain-Policies: none\n      ssl_protocols: \"TLSv1.2 TLSv1.3\"    # SSL/TLS protocols (optional)\n      ssl_ciphers: \"ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305\"  # SSL cipher suites (optional)\n\n  domains:\n    - domain: app.example.com\n    - domain: www.example.com\n\n  secrets:                       # Environment variables\n    - key: APP_KEY\n      value: base64:your-app-key\n    - key: DB_PASSWORD\n      value: secret123\n\n  volumes:                       # Persistent volumes\n    - name: storage\n      mount_path: /var/www/html/storage\n      volume_size: 10            # Size in GB\n\n  services:                      # Database/cache services\n    - name: database\n      type: mysql                # mysql, postgresql, mongodb, redis, valkey, rabbitmq, minio, sftp\n      version: \"8.0\"\n      memory: 2Gi\n      volume_size: 20Gi\n      settings:                  # Service-specific settings\n        extensions:\n          - postgis\n\n    - name: cache\n      type: redis\n      version: \"7.2\"\n      memory: 512Mi\n      volume_size: 1Gi\n\n    - name: queue-worker        # Worker service\n      type: worker\n      memory: 1Gi\n      command: php artisan queue:work\n\n  container_services:            # Pre-built container services\n    - name: pdf-generator\n      type: gotenberg            # gotenberg, chrome-headless, clickhouse\n      version: \"8\"\n      memory: 1Gi\n```\n\n## Query Parameters\n\n- `dry_run` (boolean, default: false) - When true, shows what changes would be made without applying them\n- `auto_deploy` (boolean, default: true) - When true, automatically deploys the application after changes\n\n## Example cURL Request\n\n```bash\n# Normal deployment\ncurl -X POST https://api.ploi.cloud/api/v1/infrastructure/apply \\\n  -H \"Authorization: Bearer YOUR_API_TOKEN\" \\\n  -H \"Content-Type: application/yaml\" \\\n  --data-binary @ploi.yaml\n\n# Dry run mode - preview changes without applying\ncurl -X POST \"https://api.ploi.cloud/api/v1/infrastructure/apply?dry_run=true\" \\\n  -H \"Authorization: Bearer YOUR_API_TOKEN\" \\\n  -H \"Content-Type: application/yaml\" \\\n  --data-binary @ploi.yaml\n\n# Apply changes without automatic deployment\ncurl -X POST \"https://api.ploi.cloud/api/v1/infrastructure/apply?auto_deploy=false\" \\\n  -H \"Authorization: Bearer YOUR_API_TOKEN\" \\\n  -H \"Content-Type: application/yaml\" \\\n  --data-binary @ploi.yaml\n```\n\n## Response Format\n\n```json\n{\n  \"application_id\": 123,\n  \"application_name\": \"my-app\",\n  \"changes\": [\n    \"Application 'my-app' created\",\n    \"Domain 'app.example.com' added\",\n    \"Secret 'APP_KEY' created\",\n    \"Service 'database' (mysql) created\"\n  ],\n  \"structured_changes\": {\n    \"application\": { \"action\": \"created\", \"name\": \"my-app\" },\n    \"domains\": [{ \"action\": \"created\", \"domain\": \"app.example.com\" }],\n    \"secrets\": [{ \"action\": \"created\", \"key\": \"APP_KEY\" }],\n    \"services\": [{ \"action\": \"created\", \"name\": \"database\", \"type\": \"mysql\" }]\n  },\n  \"needs_deployment\": true,\n  \"auto_deploy_enabled\": true,\n  \"deployment_id\": 456,        // Only present if auto_deploy=true and deployment started\n  \"dry_run\": false,             // Indicates if this was a dry run\n  \"team\": \"My Team\"\n}\n```\n\n## Dry Run Mode\n\nWhen `dry_run=true`:\n- No database changes are made\n- No resources are created or modified\n- Response shows what would be changed with \"[DRY RUN] Would...\" prefixes\n- Deployments are never triggered, even if `auto_deploy=true`\n- Use this to validate your YAML and preview changes before applying",
 		PathParams:  []paramDef{},
 		QueryParams: []paramDef{},
 		BodyParams:  []paramDef{},
@@ -1329,22 +1242,6 @@ func registerGenerated(root *cobra.Command, c *client.Client) {
 		BodyParams:  []paramDef{},
 	})
 	gTeams.AddCommand(cTeamsIndex)
-
-	gTeamsInfrastructure := &cobra.Command{Use: "infrastructure", Short: "Manage infrastructure"}
-	gTeams.AddCommand(gTeamsInfrastructure)
-	cTeamsInfrastructureExportYaml := buildCmd(c, opSpec{
-		ID:       "teams.infrastructure.export-yaml",
-		Method:   "GET",
-		PathTmpl: "/teams/{team}/export-yaml",
-		Use:      "export-yaml",
-		Short:    "",
-		PathParams: []paramDef{
-			{Name: "team", Type: "integer", Required: true, Desc: "The team ID"},
-		},
-		QueryParams: []paramDef{},
-		BodyParams:  []paramDef{},
-	})
-	gTeamsInfrastructure.AddCommand(cTeamsInfrastructureExportYaml)
 
 	gTeamsNetworks := &cobra.Command{Use: "networks", Short: "Manage networks"}
 	gTeams.AddCommand(gTeamsNetworks)
@@ -1712,7 +1609,6 @@ func registerGenerated(root *cobra.Command, c *client.Client) {
 			{Name: "name", Type: "string", Required: true, Desc: ""},
 			{Name: "password", Type: "string", Required: true, Desc: ""},
 			{Name: "scopes", Type: "array:string", Required: false, Desc: ""},
-			{Name: "teams", Type: "array:integer", Required: false, Desc: ""},
 		},
 	})
 	gUserTokens.AddCommand(cUserTokensStore)
