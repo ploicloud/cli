@@ -155,7 +155,7 @@ func printList(w io.Writer, items []any) error {
 		}
 		row := make([]string, len(cols))
 		for i, c := range cols {
-			row[i] = formatScalar(m[c])
+			row[i] = formatCell(m[c])
 		}
 		fmt.Fprintln(tw, strings.Join(row, "\t"))
 	}
@@ -163,12 +163,12 @@ func printList(w io.Writer, items []any) error {
 }
 
 func pickColumns(obj map[string]any) []string {
-	preferred := []string{"id", "name", "slug", "type", "application_type", "status", "email", "host", "url", "created_at", "updated_at"}
+	preferred := []string{"id", "name", "slug", "type", "application_type", "status", "email", "host", "url", "settings", "created_at", "updated_at"}
 	cols := []string{}
 	seen := map[string]bool{}
 	for _, p := range preferred {
 		if v, ok := obj[p]; ok {
-			if _, isMap := v.(map[string]any); isMap {
+			if nested, isMap := v.(map[string]any); isMap && formatNestedObject(nested) == "" {
 				continue
 			}
 			if _, isList := v.([]any); isList {
@@ -244,8 +244,18 @@ func formatScalar(v any) string {
 	}
 }
 
+func formatCell(v any) string {
+	if nested, ok := v.(map[string]any); ok {
+		if s := formatNestedObject(nested); s != "" {
+			return s
+		}
+		return "-"
+	}
+	return formatScalar(v)
+}
+
 func formatNestedObject(m map[string]any) string {
-	if len(m) == 0 || len(m) > 4 {
+	if len(m) == 0 {
 		return ""
 	}
 	parts := []string{}
