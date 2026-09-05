@@ -52,6 +52,7 @@ type paramSchema struct {
 	Enum       []any                   `json:"enum"`
 	Items      *paramSchema            `json:"items"`
 	Format     string                  `json:"format"`
+	Desc       string                  `json:"description"`
 }
 
 func (s *paramSchema) primary() string {
@@ -76,6 +77,124 @@ type op struct {
 	method string
 	path   string
 	op     *operation
+}
+
+type bodyParam struct {
+	Name     string
+	Type     string
+	Required bool
+	Desc     string
+}
+
+var flagNameReplacer = strings.NewReplacer("_", "-", ".", "-")
+
+func flagName(name string) string {
+	return flagNameReplacer.Replace(name)
+}
+
+func paramType(s *paramSchema) string {
+	t := s.primary()
+	if t == "array" && s.Items != nil {
+		return "array:" + s.Items.primary()
+	}
+	return t
+}
+
+func describe(s *paramSchema) string {
+	parts := []string{}
+	if len(s.Enum) > 0 {
+		values := make([]string, 0, len(s.Enum))
+		for _, e := range s.Enum {
+			if str, ok := e.(string); ok {
+				values = append(values, str)
+				continue
+			}
+			values = append(values, fmt.Sprint(e))
+		}
+		parts = append(parts, "one of: "+strings.Join(values, ", "))
+	}
+	if s.Desc != "" {
+		parts = append(parts, s.Desc)
+	}
+	return strings.Join(parts, "; ")
+}
+
+// bodyParams walks a request body schema and returns one param per top-level
+// property, plus one per direct child of any object-typed property. Children are
+// named with their dotted path and are never required: a requirement declared
+// inside a nested schema is usually conditional on other fields, which is the
+// API's business to validate rather than the flag layer's.
+func bodyParams(schema *paramSchema) []bodyParam {
+	if schema == nil || len(schema.Properties) == 0 {
+		return nil
+	}
+
+	required := map[string]bool{}
+	for _, r := range schema.Required {
+		required[r] = true
+	}
+
+	names := make([]string, 0, len(schema.Properties))
+	for name := range schema.Properties {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	params := []bodyParam{}
+	leaves := []bodyParam{}
+	for _, name := range names {
+		ps := schema.Properties[name]
+		if ps == nil {
+			continue
+		}
+		params = append(params, bodyParam{
+			Name:     name,
+			Type:     paramType(ps),
+			Required: required[name],
+			Desc:     describe(ps),
+		})
+
+		if ps.primary() != "object" || len(ps.Properties) == 0 {
+			continue
+		}
+
+		subNames := make([]string, 0, len(ps.Properties))
+		for sub := range ps.Properties {
+			subNames = append(subNames, sub)
+		}
+		sort.Strings(subNames)
+		for _, sub := range subNames {
+			subSchema := ps.Properties[sub]
+			if subSchema == nil {
+				continue
+			}
+			leaves = append(leaves, bodyParam{
+				Name: name + "." + sub,
+				Type: paramType(subSchema),
+				Desc: describe(subSchema),
+			})
+		}
+	}
+
+	return append(params, leaves...)
+}
+
+// checkCollisions rejects an operation whose params would register the same
+// cobra flag twice. Duplicate registration panics at process start, which would
+// ship a CLI unable to run any command at all.
+func checkCollisions(opID string, query []parameter, body []bodyParam) error {
+	seen := map[string]string{}
+	for _, p := range query {
+		seen[flagName(p.Name)] = p.Name
+	}
+	for _, p := range body {
+		flag := flagName(p.Name)
+		if other, exists := seen[flag]; exists {
+			return fmt.Errorf("operation %s: %q and %q both map to flag --%s", opID, other, p.Name, flag)
+		}
+		seen[flag] = p.Name
+	}
+	return nil
 }
 
 func main() {
@@ -194,31 +313,18 @@ func main() {
 		}
 		out.line("\t\t},")
 
-		out.line("\t\tBodyParams: []paramDef{")
+		var body []bodyParam
 		if o.op.RequestBody != nil {
-			if mt, ok := o.op.RequestBody.Content["application/json"]; ok && mt.Schema != nil {
-				reqSet := map[string]bool{}
-				for _, r := range mt.Schema.Required {
-					reqSet[r] = true
-				}
-				keys := make([]string, 0, len(mt.Schema.Properties))
-				for k := range mt.Schema.Properties {
-					keys = append(keys, k)
-				}
-				sort.Strings(keys)
-				for _, name := range keys {
-					ps := mt.Schema.Properties[name]
-					if ps == nil {
-						continue
-					}
-					t := ps.primary()
-					if t == "array" && ps.Items != nil {
-						t = "array:" + ps.Items.primary()
-					}
-					out.line(fmt.Sprintf("\t\t\t{Name: %q, Type: %q, Required: %v},",
-						name, t, reqSet[name]))
-				}
+			if mt, ok := o.op.RequestBody.Content["application/json"]; ok {
+				body = bodyParams(mt.Schema)
 			}
+		}
+		must(checkCollisions(o.id, queryParams, body))
+
+		out.line("\t\tBodyParams: []paramDef{")
+		for _, p := range body {
+			out.line(fmt.Sprintf("\t\t\t{Name: %q, Type: %q, Required: %v, Desc: %q},",
+				p.Name, p.Type, p.Required, p.Desc))
 		}
 		out.line("\t\t},")
 		out.line("\t})")

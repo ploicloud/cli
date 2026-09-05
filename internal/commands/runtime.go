@@ -72,15 +72,7 @@ func buildCmd(c *client.Client, op opSpec) *cobra.Command {
 				query[p.Name] = stringifyFlag(p, flagVals[p.Name])
 			}
 		}
-		var body map[string]any
-		for _, p := range op.BodyParams {
-			if cmd.Flags().Changed(kebab(p.Name)) {
-				if body == nil {
-					body = map[string]any{}
-				}
-				body[p.Name] = unwrapFlag(p, flagVals[p.Name])
-			}
-		}
+		body := assembleBody(cmd, op.BodyParams, flagVals)
 
 		req := client.Request{
 			Method:     op.Method,
@@ -166,8 +158,55 @@ func unwrapFlag(p paramDef, v any) any {
 	return v
 }
 
+// assembleBody collects the body params the user actually set. A flag left at
+// its default is omitted entirely: update endpoints validate settings with
+// `sometimes`, so sending an untouched key would overwrite stored values.
+func assembleBody(cmd *cobra.Command, params []paramDef, vals map[string]any) map[string]any {
+	var body map[string]any
+	for _, p := range params {
+		if !cmd.Flags().Changed(kebab(p.Name)) {
+			continue
+		}
+		if body == nil {
+			body = map[string]any{}
+		}
+		assignBodyValue(body, p.Name, unwrapFlag(p, vals[p.Name]))
+	}
+	return body
+}
+
+var kebabReplacer = strings.NewReplacer("_", "-", ".", "-")
+
 func kebab(s string) string {
-	return strings.ReplaceAll(s, "_", "-")
+	return kebabReplacer.Replace(s)
+}
+
+// assignBodyValue places a value into the request body at its dotted path.
+// Parent object flags are ordered before their children by the generator, so a
+// child always lands on top of any JSON document supplied for the parent: the
+// more specific flag wins, and keys the JSON carried alone are left intact.
+func assignBodyValue(body map[string]any, name string, value any) {
+	parent, child, nested := strings.Cut(name, ".")
+	if !nested {
+		body[name] = value
+		return
+	}
+
+	existing, supplied := body[parent]
+	container, isObject := existing.(map[string]any)
+	switch {
+	case isObject:
+	case supplied:
+		// The parent flag held something that did not decode as a JSON object,
+		// so there is nothing to merge into. Leave it as the user typed it and
+		// let the API reject it, rather than dropping it and silently applying
+		// a partial update.
+		return
+	default:
+		container = map[string]any{}
+		body[parent] = container
+	}
+	container[child] = value
 }
 
 func printResponse(resp *client.Response) error {
