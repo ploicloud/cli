@@ -95,3 +95,57 @@ func TestEmptyAndDeeplyNestedSettingsFallBack(t *testing.T) {
 		}
 	}
 }
+
+func TestListMasksCredentials(t *testing.T) {
+	out := renderList(t, []any{map[string]any{
+		"id":   float64(1033),
+		"name": "mysql",
+		"settings": map[string]any{
+			"username": "dbuser", "password": "PFTDMdA0QG9ThLbSUoG4Kudb",
+			"root_password": "bPvGQZ39pKBZilRz1DTV4KEK", "memory_request": "512Mi",
+		},
+	}})
+
+	for _, leaked := range []string{"PFTDMdA0QG9ThLbSUoG4Kudb", "bPvGQZ39pKBZilRz1DTV4KEK"} {
+		if strings.Contains(out, leaked) {
+			t.Fatalf("credential printed in plain output:\n%s", out)
+		}
+	}
+	if !strings.Contains(out, "password=********") || !strings.Contains(out, "root_password=********") {
+		t.Fatalf("credentials should still be listed as masked:\n%s", out)
+	}
+	if !strings.Contains(out, "username=dbuser") || !strings.Contains(out, "memory_request=512Mi") {
+		t.Fatalf("non-secret settings must stay visible:\n%s", out)
+	}
+}
+
+func TestObjectOutputMasksCredentials(t *testing.T) {
+	var buf bytes.Buffer
+	if err := printObject(&buf, map[string]any{
+		"name":     "cache",
+		"settings": map[string]any{"password": "zWn7edNfFsB9yOQbuiL8", "maxmemory_policy": "allkeys-lru"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+
+	if strings.Contains(out, "zWn7edNfFsB9yOQbuiL8") {
+		t.Fatalf("credential printed by single-object output:\n%s", out)
+	}
+	if !strings.Contains(out, "allkeys-lru") {
+		t.Fatalf("non-secret value lost:\n%s", out)
+	}
+}
+
+func TestSecretKeyClassification(t *testing.T) {
+	for k, want := range map[string]bool{
+		"password": true, "root_password": true, "api_key": true, "access_token": true,
+		"secret": true, "apikey": true,
+		"maxmemory_policy": false, "memory_request": false, "username": false,
+		"public_key": false, "key_id": false, "keyword": false, "volume_size": false,
+	} {
+		if got := isSecretKey(k); got != want {
+			t.Errorf("isSecretKey(%q) = %v, want %v", k, got, want)
+		}
+	}
+}

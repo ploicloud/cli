@@ -105,7 +105,7 @@ func printObjectIndented(w io.Writer, obj map[string]any, indent string) error {
 			tw.Flush()
 			_ = printObjectIndented(w, vv, indent+"  ")
 		default:
-			fmt.Fprintf(tw, "%s%s\t%s\n", indent, k, formatScalar(v))
+			fmt.Fprintf(tw, "%s%s\t%s\n", indent, k, redactScalar(k, v))
 		}
 	}
 	return tw.Flush()
@@ -244,6 +244,36 @@ func formatScalar(v any) string {
 	}
 }
 
+const secretMask = "********"
+
+var (
+	secretKeyFragments  = []string{"_key", "password", "passwd", "secret", "token", "apikey", "authkey"}
+	allowedKeyFragments = []string{"public_key", "key_id", "keyword"}
+)
+
+func isSecretKey(k string) bool {
+	lk := strings.ToLower(k)
+	for _, a := range allowedKeyFragments {
+		if strings.Contains(lk, a) {
+			return false
+		}
+	}
+	for _, f := range secretKeyFragments {
+		if strings.Contains(lk, f) {
+			return true
+		}
+	}
+	return false
+}
+
+func redactScalar(k string, v any) string {
+	s := formatScalar(v)
+	if s != "-" && isSecretKey(k) {
+		return secretMask
+	}
+	return s
+}
+
 func formatCell(v any) string {
 	if nested, ok := v.(map[string]any); ok {
 		if s := formatNestedObject(nested); s != "" {
@@ -265,7 +295,7 @@ func formatNestedObject(m map[string]any) string {
 		case map[string]any, []any:
 			return ""
 		}
-		s := formatScalar(v)
+		s := redactScalar(k, v)
 		if s == "-" {
 			continue
 		}
