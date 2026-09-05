@@ -20,9 +20,7 @@ fi
 echo "==> Syncing OpenAPI spec from production"
 make sync-spec
 
-SPEC_CHANGED=0
 if ! git diff --quiet gen/spec.json; then
-    SPEC_CHANGED=1
     echo "    Spec changed:"
     git diff --stat gen/spec.json | sed 's/^/    /'
 else
@@ -44,8 +42,8 @@ if git rev-parse "$VERSION" >/dev/null 2>&1; then
     exit 1
 fi
 
-if [ $SPEC_CHANGED -eq 1 ]; then
-    git add gen/spec.json
+git add gen/spec.json internal/commands/zz_generated.go
+if ! git diff --cached --quiet; then
     git commit -m "chore: sync OpenAPI spec for $VERSION"
 fi
 
